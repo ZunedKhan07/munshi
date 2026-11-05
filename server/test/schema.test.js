@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {IntentSchema} from '../src/services/llm.js';
+test('accepts closed intent schema',()=>{assert.equal(IntentSchema.safeParse({intent:'udhaar_add',party:'Sharma',amount:200}).success,true);});test('rejects unknown keys and invalid amounts',()=>{assert.equal(IntentSchema.safeParse({intent:'udhaar_add',amount:-1,extra:'x'}).success,false);});
