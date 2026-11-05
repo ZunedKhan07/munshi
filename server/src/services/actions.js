@@ -1,24 +1,263 @@
-import Party from '../models/Party.js'; import Item from '../models/Item.js'; import Transaction from '../models/Transaction.js'; import {chooseMatch} from '../utils/match.js'; import {normalizeUnit} from '../utils/numbers.js';
+import Party from "../models/Party.js";
+import Item from "../models/Item.js";
+import Transaction from "../models/Transaction.js";
+import { chooseMatch } from "../utils/match.js";
+import { normalizeUnit } from "../utils/numbers.js";
 // Pending writes are per-user and expire after two minutes. Replace this Map with Redis for multi-instance production.
-const pending=new Map(); const TTL=120000;
-const key=id=>String(id);
-export function getPending(userId){const p=pending.get(key(userId));if(!p)return null;if(Date.now()>p.expires){pending.delete(key(userId));return null;}return p;}
-export function clearPending(userId){pending.delete(key(userId));}
-function ask(text,action){pending.set(key(action.user),{...action,expires:Date.now()+TTL});return {reply:text,pending:true,intent:action.intent};}
-function rupees(n){return new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(n);}
-async function partyMatch(user,name){const list=await Party.find({user}).select('name aliases balance').lean();return chooseMatch(name,list);}
-async function itemMatch(user,name){const list=await Item.find({user}).select('name aliases qty unit toBuy').lean();return chooseMatch(name,list);}
-export async function handleIntent(user,intent){const p=getPending(user);if(intent.intent==='confirm_yes'){if(!p)return {reply:'Abhi koi pending kaam nahi hai.',pending:false};clearPending(user);return execute(user,p);}
-if(intent.intent==='confirm_no'){clearPending(user);return {reply:'Theek hai, nahi kiya.',pending:false};}
-if(intent.intent==='undo_last'){const tx=await Transaction.findOne({user,undone:false}).sort({createdAt:-1});if(!tx)return {reply:'Undo karne ke liye koi entry nahi mili.',pending:false};return ask(`Last entry ${rupees(tx.amount)} rupay ki hai. Isse reverse kar doon? Haan ya na?`,{user,intent:'undo_last',transactionId:String(tx._id)});}
-const writes=['udhaar_add','payment_received','stock_add','stock_reduce','mark_to_buy'];if(writes.includes(intent.intent)){if(!intent.amount&&['udhaar_add','payment_received'].includes(intent.intent))return {reply:'Kitne rupay? Amount bata dijiye.',pending:false};if(!intent.qty&&['stock_add','stock_reduce'].includes(intent.intent))return {reply:'Kitni quantity add ya kam karni hai?',pending:false};if(['udhaar_add','payment_received'].includes(intent.intent)){if(!intent.party)return {reply:'Kis grahak ke khate mein?',pending:false};const match=await partyMatch(user,intent.party);if(match.status==='ambiguous')return {reply:`Do naam mil rahe hain: ${match.matches.map(x=>x.name).join(' ya ')}. Kaunsa?`,pending:false};if(match.status==='none'&&intent.intent==='payment_received')return {reply:'Yeh grahak nahi mila. Pehle udhaar entry banayein.',pending:false};const isNew=match.status==='none';const prompt=isNew?`Naya grahak ${intent.party} jodkar ${rupees(intent.amount)} rupay udhaar likh doon? Haan ya na?`:`${match.record.name} ji ke khate mein ${rupees(intent.amount)} rupay ${intent.intent==='udhaar_add'?'jod':'payment ke roop mein darj'} doon? Haan ya na?`;return ask(prompt,{user,intent:intent.intent,partyName:match.record?.name||intent.party,amount:intent.amount,note:intent.note||'',newParty:isNew});}
-if(!intent.item)return {reply:'Kaunsa samaan?',pending:false};const match=await itemMatch(user,intent.item);if(match.status==='ambiguous')return {reply:`Do item mil rahe hain: ${match.matches.map(x=>x.name).join(' ya ')}. Kaunsa?`,pending:false};if(intent.intent==='stock_reduce'&&match.status==='none')return {reply:'Yeh item stock mein nahi mila.',pending:false};return ask(`${intent.item} ka ${intent.qty||''} ${normalizeUnit(intent.unit)} ${intent.intent==='stock_add'?'stock mein jod':'stock se kam'} doon? Haan ya na?`,{user,intent:intent.intent,itemName:match.record?.name||intent.item,qty:intent.qty,unit:normalizeUnit(intent.unit)});}
-if(intent.intent==='balance_query'){if(!intent.party)return {reply:'Kis grahak ka balance?',pending:false};const m=await partyMatch(user,intent.party);if(m.status==='ambiguous')return {reply:`Kaunsa grahak: ${m.matches.map(x=>x.name).join(' ya ')}?`,pending:false};if(!m.record)return {reply:'Grahak nahi mila.',pending:false};return {reply:`${m.record.name} ji ka baaki ${rupees(m.record.balance)} rupay hai.`,pending:false};}
-if(intent.intent==='stock_query'){if(!intent.item)return {reply:'Kaunsa item check karna hai?',pending:false};const m=await itemMatch(user,intent.item);if(!m.record)return {reply:'Item nahi mila.',pending:false};return {reply:`${m.record.name} ka stock ${m.record.qty} ${m.record.unit} hai.`,pending:false};}
-if(intent.intent==='to_buy_list'){const items=await Item.find({user,toBuy:true}).lean();return {reply:items.length?`Mangwana hai: ${items.map(i=>i.name).join(', ')}.`:'Abhi mangwane ki list khaali hai.',pending:false};}
-return {reply:'Maaf kijiye, samajh nahi aaya. Aap dobara bolenge?',pending:false};}
-async function execute(user,a){if(a.intent==='undo_last'){const tx=await Transaction.findOne({_id:a.transactionId,user,undone:false});if(!tx)return {reply:'Entry pehle hi undo ho chuki hai.',pending:false};const party=await Party.findOne({_id:tx.party,user});if(party){party.balance=Math.max(0,party.balance+(tx.type==='udhaar'?-tx.amount:tx.amount));await party.save();}tx.undone=true;await tx.save();return {reply:'Pichhli entry reverse kar di.',pending:false};}
-if(['udhaar_add','payment_received'].includes(a.intent)){let party=await Party.findOne({user,name:a.partyName});if(!party&&a.intent==='udhaar_add')party=await Party.create({user,name:a.partyName,aliases:[],balance:0});if(!party)return {reply:'Grahak nahi mila.',pending:false};const type=a.intent==='udhaar_add'?'udhaar':'payment';const delta=type==='udhaar'?a.amount:-a.amount;if(party.balance+delta<0)return {reply:'Payment balance se zyada hai. Amount dobara check karein.',pending:false};party.balance+=delta;await party.save();await Transaction.create({user,party:party._id,type,amount:a.amount,note:a.note||''});return {reply:`${party.name} ji ka khata update ho gaya. Baaki ${rupees(party.balance)} rupay.`,pending:false};}
-let item=await Item.findOne({user,name:a.itemName});if(!item&&a.intent==='stock_add')item=await Item.create({user,name:a.itemName,qty:0,unit:a.unit});if(!item)return {reply:'Item nahi mila.',pending:false};if(a.intent==='mark_to_buy'){item.toBuy=true;await item.save();return {reply:`${item.name} mangwane ki list mein daal diya.`,pending:false};}const next=item.qty+(a.intent==='stock_add'?a.qty:-a.qty);if(next<0)return {reply:`${item.name} ka stock ${item.qty} ${item.unit} hai. Itna kam nahi kar sakte.`,pending:false};item.qty=next;item.unit=a.unit||item.unit;item.updatedAt=new Date();await item.save();return {reply:`${item.name} ka stock ab ${item.qty} ${item.unit} hai.`,pending:false};}
-export async function snapshot(user){const [parties,items,transactions]=await Promise.all([Party.find({user}).sort({name:1}).lean(),Item.find({user}).sort({name:1}).lean(),Transaction.find({user}).populate('party','name').sort({createdAt:-1}).limit(30).lean()]);return {parties,items,transactions,toBuy:items.filter(i=>i.toBuy)};}
-export async function resetUserData(user){await Promise.all([Party.deleteMany({user}),Item.deleteMany({user}),Transaction.deleteMany({user})]);clearPending(user);}
+const pending = new Map();
+const TTL = 120000;
+const key = (id) => String(id);
+export function getPending(userId) {
+  const p = pending.get(key(userId));
+  if (!p) return null;
+  if (Date.now() > p.expires) {
+    pending.delete(key(userId));
+    return null;
+  }
+  return p;
+}
+export function clearPending(userId) {
+  pending.delete(key(userId));
+}
+function ask(text, action) {
+  pending.set(key(action.user), { ...action, expires: Date.now() + TTL });
+  return { reply: text, pending: true, intent: action.intent };
+}
+function rupees(n) {
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(n);
+}
+async function partyMatch(user, name) {
+  const list = await Party.find({ user }).select("name aliases balance").lean();
+  return chooseMatch(name, list);
+}
+async function itemMatch(user, name) {
+  const list = await Item.find({ user })
+    .select("name aliases qty unit toBuy")
+    .lean();
+  return chooseMatch(name, list);
+}
+export async function handleIntent(user, intent) {
+  const p = getPending(user);
+  if (intent.intent === "confirm_yes") {
+    if (!p) return { reply: "Abhi koi pending kaam nahi hai.", pending: false };
+    clearPending(user);
+    return execute(user, p);
+  }
+  if (intent.intent === "confirm_no") {
+    clearPending(user);
+    return { reply: "Theek hai, nahi kiya.", pending: false };
+  }
+  if (intent.intent === "undo_last") {
+    const tx = await Transaction.findOne({ user, undone: false }).sort({
+      createdAt: -1,
+    });
+    if (!tx)
+      return {
+        reply: "Undo karne ke liye koi entry nahi mili.",
+        pending: false,
+      };
+    return ask(
+      `Last entry ${rupees(tx.amount)} rupay ki hai. Isse reverse kar doon? Haan ya na?`,
+      { user, intent: "undo_last", transactionId: String(tx._id) },
+    );
+  }
+  const writes = [
+    "udhaar_add",
+    "payment_received",
+    "stock_add",
+    "stock_reduce",
+    "mark_to_buy",
+  ];
+  if (writes.includes(intent.intent)) {
+    if (
+      !intent.amount &&
+      ["udhaar_add", "payment_received"].includes(intent.intent)
+    )
+      return { reply: "Kitne rupay? Amount bata dijiye.", pending: false };
+    if (!intent.qty && ["stock_add", "stock_reduce"].includes(intent.intent))
+      return { reply: "Kitni quantity add ya kam karni hai?", pending: false };
+    if (["udhaar_add", "payment_received"].includes(intent.intent)) {
+      if (!intent.party)
+        return { reply: "Kis grahak ke khate mein?", pending: false };
+      const match = await partyMatch(user, intent.party);
+      if (match.status === "ambiguous")
+        return {
+          reply: `Do naam mil rahe hain: ${match.matches.map((x) => x.name).join(" ya ")}. Kaunsa?`,
+          pending: false,
+        };
+      if (match.status === "none" && intent.intent === "payment_received")
+        return {
+          reply: "Yeh grahak nahi mila. Pehle udhaar entry banayein.",
+          pending: false,
+        };
+      const isNew = match.status === "none";
+      const prompt = isNew
+        ? `Naya grahak ${intent.party} jodkar ${rupees(intent.amount)} rupay udhaar likh doon? Haan ya na?`
+        : `${match.record.name} ji ke khate mein ${rupees(intent.amount)} rupay ${intent.intent === "udhaar_add" ? "jod" : "payment ke roop mein darj"} doon? Haan ya na?`;
+      return ask(prompt, {
+        user,
+        intent: intent.intent,
+        partyName: match.record?.name || intent.party,
+        amount: intent.amount,
+        note: intent.note || "",
+        newParty: isNew,
+      });
+    }
+    if (!intent.item) return { reply: "Kaunsa samaan?", pending: false };
+    const match = await itemMatch(user, intent.item);
+    if (match.status === "ambiguous")
+      return {
+        reply: `Do item mil rahe hain: ${match.matches.map((x) => x.name).join(" ya ")}. Kaunsa?`,
+        pending: false,
+      };
+    if (intent.intent === "stock_reduce" && match.status === "none")
+      return { reply: "Yeh item stock mein nahi mila.", pending: false };
+    return ask(
+      `${intent.item} ka ${intent.qty || ""} ${normalizeUnit(intent.unit)} ${intent.intent === "stock_add" ? "stock mein jod" : "stock se kam"} doon? Haan ya na?`,
+      {
+        user,
+        intent: intent.intent,
+        itemName: match.record?.name || intent.item,
+        qty: intent.qty,
+        unit: normalizeUnit(intent.unit),
+      },
+    );
+  }
+  if (intent.intent === "balance_query") {
+    if (!intent.party)
+      return { reply: "Kis grahak ka balance?", pending: false };
+    const m = await partyMatch(user, intent.party);
+    if (m.status === "ambiguous")
+      return {
+        reply: `Kaunsa grahak: ${m.matches.map((x) => x.name).join(" ya ")}?`,
+        pending: false,
+      };
+    if (!m.record) return { reply: "Grahak nahi mila.", pending: false };
+    return {
+      reply: `${m.record.name} ji ka baaki ${rupees(m.record.balance)} rupay hai.`,
+      pending: false,
+    };
+  }
+  if (intent.intent === "stock_query") {
+    if (!intent.item)
+      return { reply: "Kaunsa item check karna hai?", pending: false };
+    const m = await itemMatch(user, intent.item);
+    if (!m.record) return { reply: "Item nahi mila.", pending: false };
+    return {
+      reply: `${m.record.name} ka stock ${m.record.qty} ${m.record.unit} hai.`,
+      pending: false,
+    };
+  }
+  if (intent.intent === "to_buy_list") {
+    const items = await Item.find({ user, toBuy: true }).lean();
+    return {
+      reply: items.length
+        ? `Mangwana hai: ${items.map((i) => i.name).join(", ")}.`
+        : "Abhi mangwane ki list khaali hai.",
+      pending: false,
+    };
+  }
+  return {
+    reply: "Maaf kijiye, samajh nahi aaya. Aap dobara bolenge?",
+    pending: false,
+  };
+}
+async function execute(user, a) {
+  if (a.intent === "undo_last") {
+    const tx = await Transaction.findOne({
+      _id: a.transactionId,
+      user,
+      undone: false,
+    });
+    if (!tx)
+      return { reply: "Entry pehle hi undo ho chuki hai.", pending: false };
+    const party = await Party.findOne({ _id: tx.party, user });
+    if (party) {
+      party.balance = Math.max(
+        0,
+        party.balance + (tx.type === "udhaar" ? -tx.amount : tx.amount),
+      );
+      await party.save();
+    }
+    tx.undone = true;
+    await tx.save();
+    return { reply: "Pichhli entry reverse kar di.", pending: false };
+  }
+  if (["udhaar_add", "payment_received"].includes(a.intent)) {
+    let party = await Party.findOne({ user, name: a.partyName });
+    if (!party && a.intent === "udhaar_add")
+      party = await Party.create({
+        user,
+        name: a.partyName,
+        aliases: [],
+        balance: 0,
+      });
+    if (!party) return { reply: "Grahak nahi mila.", pending: false };
+    const type = a.intent === "udhaar_add" ? "udhaar" : "payment";
+    const delta = type === "udhaar" ? a.amount : -a.amount;
+    if (party.balance + delta < 0)
+      return {
+        reply: "Payment balance se zyada hai. Amount dobara check karein.",
+        pending: false,
+      };
+    party.balance += delta;
+    await party.save();
+    await Transaction.create({
+      user,
+      party: party._id,
+      type,
+      amount: a.amount,
+      note: a.note || "",
+    });
+    return {
+      reply: `${party.name} ji ka khata update ho gaya. Baaki ${rupees(party.balance)} rupay.`,
+      pending: false,
+    };
+  }
+  let item = await Item.findOne({ user, name: a.itemName });
+  if (!item && a.intent === "stock_add")
+    item = await Item.create({ user, name: a.itemName, qty: 0, unit: a.unit });
+  if (!item) return { reply: "Item nahi mila.", pending: false };
+  if (a.intent === "mark_to_buy") {
+    item.toBuy = true;
+    await item.save();
+    return {
+      reply: `${item.name} mangwane ki list mein daal diya.`,
+      pending: false,
+    };
+  }
+  const next = item.qty + (a.intent === "stock_add" ? a.qty : -a.qty);
+  if (next < 0)
+    return {
+      reply: `${item.name} ka stock ${item.qty} ${item.unit} hai. Itna kam nahi kar sakte.`,
+      pending: false,
+    };
+  item.qty = next;
+  item.unit = a.unit || item.unit;
+  item.updatedAt = new Date();
+  await item.save();
+  return {
+    reply: `${item.name} ka stock ab ${item.qty} ${item.unit} hai.`,
+    pending: false,
+  };
+}
+export async function snapshot(user) {
+  const [parties, items, transactions] = await Promise.all([
+    Party.find({ user }).sort({ name: 1 }).lean(),
+    Item.find({ user }).sort({ name: 1 }).lean(),
+    Transaction.find({ user })
+      .populate("party", "name")
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .lean(),
+  ]);
+  return { parties, items, transactions, toBuy: items.filter((i) => i.toBuy) };
+}
+export async function resetUserData(user) {
+  await Promise.all([
+    Party.deleteMany({ user }),
+    Item.deleteMany({ user }),
+    Transaction.deleteMany({ user }),
+  ]);
+  clearPending(user);
+}

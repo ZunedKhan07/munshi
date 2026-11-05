@@ -1,2 +1,23 @@
-import {normalizeAudio,stt} from './gnani.js';
-export async function transcribeUpload(file){if(!file?.buffer)throw Object.assign(new Error('Audio file is required'),{status:400,code:'AUDIO_REQUIRED'});const allowed=['audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav','audio/x-wav'];if(!allowed.includes(String(file.mimetype).split(';')[0]))throw Object.assign(new Error('Unsupported audio type'),{status:415,code:'AUDIO_TYPE'});const wav=await normalizeAudio(file.buffer,file.originalname);return stt(wav);}
+import { normalizeAudio, stt } from "./gnani.js";
+export async function transcribeUpload(file) {
+  if (!file?.buffer)
+    throw Object.assign(new Error("Audio file is required"), {
+      status: 400,
+      code: "AUDIO_REQUIRED",
+    });
+  const allowed = [
+    "audio/webm",
+    "audio/ogg",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+  ];
+  if (!allowed.includes(String(file.mimetype).split(";")[0]))
+    throw Object.assign(new Error("Unsupported audio type"), {
+      status: 415,
+      code: "AUDIO_TYPE",
+    });
+  const wav = await normalizeAudio(file.buffer, file.originalname);
+  return stt(wav);
+}

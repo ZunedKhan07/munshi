@@ -1,0 +1,385 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #172b25;
+  background: #f4f7f3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 0;
+}
+.app-shell {
+  min-height: 100vh;
+}
+.topbar {
+  height: 76px;
+  background: #fff;
+  border-bottom: 1px solid #e5ece6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 max(5vw, 20px);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.brand b {
+  display: block;
+  font: 800 20px Manrope;
+}
+.brand small {
+  display: block;
+  color: #819089;
+  font-size: 11px;
+}
+.brand-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: #0d5b46;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font: 700 30px Manrope;
+}
+.brand-mark.small {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  font-size: 23px;
+}
+.ghost {
+  background: transparent;
+  color: #53665d;
+  padding: 10px 15px;
+}
+.dashboard {
+  max-width: 1040px;
+  margin: auto;
+  padding: 32px 22px 50px;
+}
+.welcome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 26px;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #0d8764;
+  font-weight: 700;
+}
+.welcome h1 {
+  font: 800 clamp(32px, 5vw, 48px)/1.1 Manrope;
+  margin: 10px 0;
+}
+.welcome h1 em {
+  font-style: normal;
+  color: #0b8763;
+}
+.muted {
+  color: #829087;
+}
+.welcome-icon {
+  font-size: 60px;
+  background: #e3f1e9;
+  border-radius: 28px;
+  padding: 22px;
+}
+.voice-card,
+.panel,
+.login-card {
+  background: #fff;
+  border: 1px solid #e6ece7;
+  border-radius: 20px;
+  box-shadow: 0 8px 30px #183c2610;
+}
+.voice-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+.mic-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 20px;
+}
+.mic-area strong {
+  font-size: 15px;
+}
+.mic-area small {
+  color: #8a9890;
+}
+.mic-button {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: #0d7658;
+  color: #fff;
+  box-shadow: 0 0 0 10px #e6f3ec;
+  font-size: 30px;
+  transition: 0.2s;
+}
+.mic-button.recording {
+  background: #c94343;
+  box-shadow: 0 0 0 10px #fae8e8;
+  animation: pulse 1s infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}
+.text-fallback {
+  display: flex;
+  gap: 9px;
+  border-top: 1px solid #edf1ed;
+  padding-top: 18px;
+}
+.text-fallback input,
+.login-card input {
+  width: 100%;
+  border: 1px solid #dfe8e1;
+  border-radius: 11px;
+  padding: 13px 14px;
+  outline: none;
+}
+.text-fallback input:focus,
+.login-card input:focus {
+  border-color: #0d8764;
+}
+.primary {
+  background: #0d7658;
+  color: #fff;
+  border-radius: 11px;
+  padding: 12px 19px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.primary:disabled,
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.panel {
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.section-head h2,
+.buy-panel h2 {
+  font: 700 17px Manrope;
+  margin: 0;
+}
+.section-head span {
+  font-size: 12px;
+  color: #829087;
+}
+.live-dot {
+  color: #0b8763 !important;
+}
+.chat-log {
+  max-height: 230px;
+  overflow: auto;
+}
+.empty {
+  text-align: center;
+  padding: 25px;
+}
+.message {
+  padding: 11px 13px;
+  background: #f5f8f5;
+  border-radius: 12px;
+  margin: 9px 0;
+}
+.message small {
+  color: #9aa69f;
+  font-size: 10px;
+}
+.message p {
+  margin: 5px 0;
+}
+.heard {
+  color: #5d6b63;
+  font-size: 13px;
+}
+.reply {
+  font-weight: 600;
+  font-size: 14px;
+}
+.tables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.table-wrap {
+  overflow: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  color: #89968e;
+  font-size: 11px;
+  font-weight: 600;
+}
+td,
+th {
+  padding: 11px 7px;
+  border-bottom: 1px solid #edf1ed;
+}
+tr:last-child td {
+  border: 0;
+}
+.money {
+  font-weight: 700;
+  color: #0d7658;
+}
+.buy-tag,
+.ok-tag {
+  font-size: 10px;
+  padding: 5px 8px;
+  border-radius: 20px;
+  background: #fff0d7;
+  color: #96610c;
+  white-space: nowrap;
+}
+.ok-tag {
+  background: #e8f5ec;
+  color: #26744e;
+}
+.buy-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.buy-panel p {
+  font-size: 12px;
+  margin: 5px 0;
+}
+.buy-list {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.buy-list span {
+  background: #fff0d7;
+  color: #8b5a0c;
+  border-radius: 20px;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+.undo-button {
+  display: block;
+  margin: 20px auto;
+  background: transparent;
+  color: #6b7b72;
+  border: 1px solid #ccd8cf;
+  padding: 12px 18px;
+  border-radius: 12px;
+}
+footer {
+  text-align: center;
+  color: #9aa69f;
+  font-size: 11px;
+  padding: 20px;
+}
+.error {
+  color: #bd3333;
+  font-size: 13px;
+}
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: linear-gradient(140deg, #e8f4ec, #f7f8f4);
+}
+.login-card {
+  width: min(100%, 390px);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-card .brand-mark {
+  margin: auto;
+}
+.login-card h1 {
+  text-align: center;
+  font: 800 30px Manrope;
+  margin: 0;
+}
+.login-card .muted,
+.login-card .eyebrow {
+  text-align: center;
+  margin: 0;
+}
+.login-card label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.login-card small {
+  text-align: center;
+  color: #89968e;
+}
+.full {
+  width: 100%;
+}
+@media (max-width: 680px) {
+  .dashboard {
+    padding: 20px 14px 35px;
+  }
+  .welcome-icon {
+    font-size: 38px;
+    padding: 14px;
+  }
+  .tables-grid {
+    grid-template-columns: 1fr;
+  }
+  .voice-card {
+    padding: 16px;
+  }
+  .text-fallback {
+    flex-direction: column;
+  }
+  .buy-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .buy-list {
+    justify-content: flex-start;
+  }
+  .topbar {
+    height: 65px;
+  }
+}

@@ -1,6 +1,15 @@
-import mongoose from 'mongoose';
-export async function connectDB(uri) {
-  mongoose.set('strictQuery', true);
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
-  return mongoose.connection;
-}
+import mongoose from "mongoose";
+import dns from "node:dns";
+
+// Forces Node.js to use Google DNS for SRV lookup
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
+export const connectDB = async () => {
+  try {
+    const connectionInstance = await mongoose.connect(process.env.MONGODB_URI);
+    console.log(`\n ✅ MongoDB connected !! DB HOST: ${connectionInstance.connection.host}`);
+  } catch (error) {
+    console.log("MongoDB connection Failed:", error);
+    process.exit(1);
+  }
+};
