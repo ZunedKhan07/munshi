@@ -1,18 +1,26 @@
 async function call(url, options = {}) {
-  const r = await fetch(url, {
+  // .env file se backend URL ko automatically attach karne ke liye
+  const fullUrl = `${import.meta.env.VITE_API_URL || ""}${url}`;
+  const isFormData = options.body instanceof FormData;
+
+  const r = await fetch(fullUrl, {
+    ...options,
     credentials: "include",
     headers: {
-      ...(options.body instanceof FormData
-        ? {}
-        : { "Content-Type": "application/json" }),
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {}),
     },
-    ...options,
   });
+
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error?.message || "Request failed");
+
+  if (!r.ok) {
+    throw new Error(data.error?.message || "Request failed");
+  }
+
   return data;
 }
+
 export const api = {
   me: () => call("/api/auth/me"),
   login: (body) =>

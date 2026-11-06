@@ -1,4 +1,3 @@
-import FormData from "form-data";
 import ffmpegPath from "ffmpeg-static";
 import ffprobePath from "ffprobe-static";
 import ffmpeg from "fluent-ffmpeg";
@@ -6,9 +5,10 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
-// VERIFY: Gnani TTS response envelope, accepted voice/model fields, output codec and STT accepted codecs can vary by account/API release.
+
 const VERIFY = {
   base: "https://api.vachana.ai",
   sttPath: "/stt/v3",
@@ -16,6 +16,7 @@ const VERIFY = {
   timeoutMs: 20000,
   retries: 1,
 };
+
 class ProviderError extends Error {
   constructor(code, message, status) {
     super(message);
@@ -23,6 +24,7 @@ class ProviderError extends Error {
     this.status = status;
   }
 }
+
 async function requestRetry(url, options) {
   let last;
   for (let attempt = 0; attempt <= VERIFY.retries; attempt++) {
@@ -31,8 +33,13 @@ async function requestRetry(url, options) {
       const timer = setTimeout(() => controller.abort(), VERIFY.timeoutMs);
       try {
         const res = await fetch(url, { ...options, signal: controller.signal });
+        
         if (!res.ok) {
           const status = res.status;
+          const errorBody = await res.text().catch(() => "Unable to read error body");
+          
+          console.error(`🔥 Gnani API Error [${status}] on ${url}:`, errorBody); 
+          
           throw new ProviderError(
             status === 401
               ? "PROVIDER_AUTH"
@@ -41,7 +48,7 @@ async function requestRetry(url, options) {
                 : status >= 500
                   ? "PROVIDER_UNAVAILABLE"
                   : "PROVIDER_ERROR",
-            `Gnani request failed (${status})`,
+            `Gnani request failed (${status}): ${errorBody}`,
             status,
           );
         }
@@ -51,13 +58,15 @@ async function requestRetry(url, options) {
       }
     } catch (e) {
       last = e;
+      console.error(`⚠️ Attempt ${attempt + 1} failed:`, e.message);
       if (e instanceof ProviderError && e.status === 401) break;
       if (attempt < VERIFY.retries)
         await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
     }
   }
-  throw last || new ProviderError("PROVIDER_ERROR", "Gnani request failed");
+  throw last || new ProviderError("PROVIDER_ERROR", "Gnani request failed completely");
 }
+
 export async function normalizeAudio(buffer, originalName = "recording.webm") {
   const ext = path.extname(originalName) || ".webm";
   const input = path.join(os.tmpdir(), `munshi-${randomUUID()}${ext}`),
@@ -95,31 +104,42 @@ export async function normalizeAudio(buffer, originalName = "recording.webm") {
     ]);
   }
 }
+
 export async function stt(wav) {
+  // Native Blob aur FormData ka use taaki multipart boundary match rahe
+  const blob = new Blob([wav], { type: "audio/wav" });
   const form = new FormData();
-  form.append("audio_file", wav, {
-    filename: "audio.wav",
-    contentType: "audio/wav",
-  });
+  form.append("audio_file", blob, "audio.wav");
   form.append("language_code", process.env.GNANI_STT_LANG || "hi-IN");
-  const headers = {
-    ...form.getHeaders(),
-    "X-API-Key-ID": process.env.GNANI_API_KEY,
-  };
+
   const res = await requestRetry(VERIFY.base + VERIFY.sttPath, {
     method: "POST",
-    headers,
+    headers: {
+      "X-API-Key-ID": process.env.GNANI_API_KEY,
+      // Native fetch boundary headers khud set kar leta hai
+    },
     body: form,
-    duplex: "half",
   });
-  const data = await res.json();
-  if (!data.success || typeof data.transcript !== "string")
+
+  const responseText = await res.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (err) {
+    console.error("🔥 Invalid JSON response from Gnani STT:", responseText);
+    throw new ProviderError("STT_INVALID_RESPONSE", "Invalid JSON from speech recognition");
+  }
+
+  if (!data.success || typeof data.transcript !== "string") {
+    console.error("🔥 Gnani STT Failure Data:", data);
     throw new ProviderError(
       "STT_FAILED",
-      "Speech recognition did not return text",
+      data.message || "Speech recognition did not return text",
     );
+  }
   return data.transcript;
 }
+
 function detectMime(buf) {
   if (buf.subarray(0, 4).toString() === "RIFF") return "audio/wav";
   if (
@@ -130,6 +150,7 @@ function detectMime(buf) {
   if (buf.subarray(4, 8).toString() === "ftyp") return "audio/mp4";
   return "application/octet-stream";
 }
+
 export async function tts(text) {
   try {
     const res = await requestRetry(VERIFY.base + VERIFY.ttsPath, {
@@ -191,7 +212,9 @@ export async function tts(text) {
         }
       : { buffer: null, mime: null, errorCode: "TTS_EMPTY_RESPONSE" };
   } catch (e) {
+    console.error("🔥 TTS Error:", e.message);
     return { buffer: null, mime: null, errorCode: e.code || "TTS_FAILED" };
   }
 }
+
 export { ProviderError };
